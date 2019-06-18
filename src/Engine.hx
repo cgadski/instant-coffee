@@ -60,14 +60,14 @@ class Engine {
 
 			switch playback {
 				case Some(player):
+					for (action in player.getActions(control.frame)) {
+						sendGameInput(action.code, action.down);
+					}
 					if (control.frame + 1 >= player.video.pauseFrame) {
 						control.pause();
 						trace('[PAUSE] @ ${control.frame + 1}');
 						playback = None;
 						control.silent = false;
-					}
-					for (action in player.getActions(control.frame)) {
-						sendGameInput(action.code, action.down);
 					}
 					callback(fakeTime);
 				case None:

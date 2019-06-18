@@ -13,14 +13,13 @@ class Main {
   _| |_| | | \\__ \\ || (_| | | | | |_  | |___| (_) | | | ||  __/  __/
  |_____|_| |_|___/\\__\\__,_|_| |_|\\__|  \\_____\\___/|_| |_| \\___|\\___|");
 		trace("Instant Coffee is enabled.");
-		/*
+		infoTrace("[r] to load initial state.");
 		infoTrace("[a-s-d] to adjust playback.");
 		infoTrace("[z] to step frame."); 
 		infoTrace("ctrl+[0-9] to set save."); 
 		infoTrace("[0-9] to load save."); 
-		infoTrace("`window.loadSave(slot, string)` to read save data.");
-		infoTrace("[r] to load initial state.");
-		*/
+		infoTrace("[p] to play the save in slot 0 in realtime");
+		infoTrace("`window.loadSave(string)` to read save data.");
 
 		var engine = new Engine();
 	}
