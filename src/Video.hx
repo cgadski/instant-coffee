@@ -14,7 +14,7 @@ class Video {
 	static var longDelaySize = 10;
 
 	public var actions:Array<Action>;
-    public var pauseFrame:Int;
+    public var pauseFrame:Int = 0;
 
 	private function getOption<T>(x:Option<T>):T {
 		switch x {
@@ -88,6 +88,7 @@ class Video {
     public function copy():Video {
         var video = new Video();
         video.actions = actions.copy();
+        video.pauseFrame = pauseFrame;
         return video;
     }
 }
@@ -103,37 +104,39 @@ class VideoRecorder {
         }
     }
 
-    public function recordKey(frame: Int, keyCode: Int, down: Bool) {
+    public function recordKey(frame: Int, keyCode: Int, down: Bool, silent: Bool) {
         switch Video.toActionCode(keyCode) {
             case Some(action):
                 var oldState = keyStates[action];
                 if (down == oldState) return;
                 keyStates[action] = down;
                 video.actions.push({frame: frame, code: action, down: down});
-				trace('---> ${Video.showActionCode(action)} ${down ? "down" : "up  "} @ ${frame}');
+				if (!silent) trace('---> ${Video.showActionCode(action)} ${down ? "down" : "up  "} @ ${frame}');
             case None:
                 return;
         }
     }
+
+    public function saveVideo(frame: Int):Video {
+        var res = video.copy();
+        res.pauseFrame = frame;
+        return res;
+    }
 }
 
 class VideoPlayer {
-    var actions: Array<Action>;
+    public var video: Video;
 
     public function new(video: Video) {
-        actions = video.actions.copy();
+        this.video = video.copy();
     }
 
     public function getActions(frame: Int): Array<{code: Int, down: Bool}> {
         var res = [];
-        while (actions.length > 0 && actions[0].frame == frame) {
-            var action = actions.shift();
+        while (video.actions.length > 0 && video.actions[0].frame == frame) {
+            var action = video.actions.shift();
             res.push({code: Video.fromActionCode(action.code), down: action.down});
         }
         return res;
-    }
-
-    public function done(frame: Int): Bool {
-        return (actions.length == 0 || actions[0].frame < frame);
     }
 }

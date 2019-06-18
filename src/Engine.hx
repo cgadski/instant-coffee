@@ -7,6 +7,7 @@ class PlayControl {
 	public var frame:Int = 0; // Frames since level start. Inputs do happen on frame 0!
 	public var paused:Bool = false; // If true, wait for frame advance to run.
 	public var speed:Int = 0; // 0 for slow, 1 for normal, 2 for fast forward.
+	public var silent:Bool = false; // Hide input messages?
 
 	public function new() {}
 
@@ -38,6 +39,9 @@ class Engine {
 		}
 		untyped window._keyup = this.keyup;
 		untyped window._keydown = this.keydown;
+		untyped window.load = function(string: String) {
+			slots[0] = new Video(string);
+		}
 
 		// Give fakeTime a reasonable initial value.
 		fakeTime = _now();
@@ -46,6 +50,8 @@ class Engine {
 		for (i in 0...10) {
 			slots.push(new Video());
 		}
+
+		control.speed = 1;
 	}
 
 	private function wrapCallback(callback:Dynamic) {
@@ -54,25 +60,21 @@ class Engine {
 
 			switch playback {
 				case Some(player):
-					if (control.frame + 1 >= callback.pauseFrame) {
+					if (control.frame + 1 >= player.video.pauseFrame) {
 						control.pause();
+						trace('[PAUSE] @ ${control.frame + 1}');
+						playback = None;
+						control.silent = false;
 					}
-					callback(fakeTime);
 					for (action in player.getActions(control.frame)) {
 						sendGameInput(action.code, action.down);
 					}
-					if (player.done(control.frame)) {
-						playback = None;
-					}
+					callback(fakeTime);
 				case None:
 					callback(fakeTime);
 			}
 
 			control.frame += 1;
-
-			if (control.paused) {
-				trace('[PAUSE] @ ${control.frame}');
-			}
 		}
 	}
 
@@ -122,7 +124,7 @@ class Engine {
 	// Top-level for keyboard input from the user.
 	private function onKey(event:Dynamic, down:Bool) {
 		if (!Util.isSome(playback)) {
-			var suppress = [83, 87, 65, 68];
+			var suppress = [83, 87, 65, 68, 82]; // alternate movement keys and `r`
 			if (suppress.indexOf(event.keyCode) == -1)
 				sendGameInput(event.keyCode, down);
 		}
@@ -134,7 +136,7 @@ class Engine {
 
 	// Send input to the game and record it.
 	private function sendGameInput(keyCode:Int, down:Bool) {
-		recording.recordKey(control.frame, keyCode, down);
+		recording.recordKey(control.frame, keyCode, down, control.silent);
 		var event = {which: keyCode, preventDefault: function() {}};
 		if (down) {
 			keydownHandler(event);
@@ -149,8 +151,11 @@ class Engine {
 		}
 	}
 
-	private function resetLevel() {
-		trace("[RESET]");
+	private function resetLevel(?slot:Int, ?replay: Bool) {
+		if (replay == null) replay = false;
+		trace('[${replay ? "REPLAY" : "RESET to"} ${(slot == null) ? "start" : "slot " + Std.string(slot) + "..."}]');
+		sendGameInput(82, true);
+		sendGameInput(82, false);
 		recording = new Video.VideoRecorder();
 		control = new PlayControl();
 		resetControls();
@@ -168,8 +173,10 @@ class Engine {
 		var oldControl = untyped JSON.parse(JSON.stringify(control));
 
 		// a to pause
-		if (keyCode == 65) { 
-			control.paused = true;
+		if (keyCode == 65) {
+			if (!oldControl.paused)
+				trace('[PAUSE] @ ${control.frame + 1}');
+			control.pause();
 			return true;
 		}
 
@@ -177,7 +184,8 @@ class Engine {
 		if (keyCode == 83 || keyCode == 68) {
 			control.paused = false;
 			control.speed = keyCode == 83 ? 0 : 1;
-			if (oldControl.paused) trace('[PLAY] @ ${control.frame}');
+			if (oldControl.paused)
+				trace('[PLAY] @ ${control.frame}');
 			triggerPausedCallback();
 			return true;
 		}
@@ -192,13 +200,35 @@ class Engine {
 		}
 
 		// 0-9 to replay slot
-		if (keyCode >= 48 && keyCode <= 57) {
-			resetLevel();
-			playback = Some(new Video.VideoPlayer(slots[keyCode - 48]));
+		if (!ctrlKey && keyCode >= 48 && keyCode <= 57) {
+			var slot = keyCode - 48;
+			resetLevel(slot);
+			playback = Some(new Video.VideoPlayer(slots[slot]));
+			control.speed = 2;
+			control.silent = true;
 			triggerPausedCallback();
+			return true;
 		}
 
-		// 0-9 to 
+		// play slot 0 back in realtime
+		if (keyCode == 80) {
+			resetLevel(0, true);
+			playback = Some(new Video.VideoPlayer(slots[0]));
+			control.speed = 1;
+			triggerPausedCallback();
+			return true;
+		}
+
+		// ctrl +0-9 to save slot
+		if (ctrlKey && keyCode >= 48 && keyCode <= 57) {
+			control.pause();
+			var slot = keyCode - 48;
+			var video = recording.saveVideo(control.frame);
+			trace('[SAVE slot ${slot}] @ ${control.frame}');
+			trace('data: ${video.toString()}');
+			slots[slot] = video;
+			return true;
+		}
 
 		return false;
 	}

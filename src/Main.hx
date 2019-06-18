@@ -12,7 +12,7 @@ class Main {
    | | | '_ \\/ __| __/ _` | '_ \\| __| | |    / _ \\|  _|  _/ _ \\/ _ \\
   _| |_| | | \\__ \\ || (_| | | | | |_  | |___| (_) | | | ||  __/  __/
  |_____|_| |_|___/\\__\\__,_|_| |_|\\__|  \\_____\\___/|_| |_| \\___|\\___|");
-		trace("Instant Coffee is enabled. Have fun.");
+		trace("Instant Coffee is enabled.");
 		/*
 		infoTrace("[a-s-d] to adjust playback.");
 		infoTrace("[z] to step frame."); 

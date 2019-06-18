@@ -64,6 +64,9 @@ class VideoTests extends haxe.unit.TestCase {
         var videoB = new Video(videoA.toString());
         assertEquals(Std.string(videoA.actions), Std.string(videoB.actions));
         assertEquals(videoA.pauseFrame, videoB.pauseFrame);
+        var videoB = videoA.copy();
+        assertEquals(Std.string(videoA.actions), Std.string(videoB.actions));
+        assertEquals(videoA.pauseFrame, videoB.pauseFrame);
     }
 }
 
