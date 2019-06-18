@@ -6,16 +6,21 @@ import haxe.ds.Option;
 class PlayControl {
 	public var frame:Int = 0; // Frames since level start. Inputs do happen on frame 0!
 	public var paused:Bool = false; // If true, wait for frame advance to run.
-	public var speed:Int = 1; // 0 for slow, 1 for normal, 2 for super
+	public var speed:Int = 0; // 0 for slow, 1 for normal, 2 for fast forward.
 
 	public function new() {}
+
+	public function pause() {
+		paused = true;
+		speed = 0;
+	}
 }
 
 class Engine {
 	public var control = new PlayControl();
 	public var playback:Option<Video.VideoPlayer> = None; // If this is initialized, we're in playback.
 	public var recording:Video.VideoRecorder = new Video.VideoRecorder();
-	public var slot:Video = new Video();
+	public var slots:Array<Video>;
 
 	var pausedCallback:Option<Dynamic> = None;
 	var fakeTime:Float = 0;
@@ -36,53 +41,66 @@ class Engine {
 
 		// Give fakeTime a reasonable initial value.
 		fakeTime = _now();
+
+		slots = new Array();
+		for (i in 0...10) {
+			slots.push(new Video());
+		}
 	}
 
-    // Modified requestAnimationFrame.
-	private function requestAnimationFrame(callback:Dynamic) {
-		switch playback {
-			case Some(player):
-				triggerPlayback(player);
-			case None:
-				{}
+	private function wrapCallback(callback:Dynamic) {
+		return function() {
+			fakeTime += 16;
+
+			switch playback {
+				case Some(player):
+					if (control.frame + 1 >= callback.pauseFrame) {
+						control.pause();
+					}
+					callback(fakeTime);
+					for (action in player.getActions(control.frame)) {
+						sendGameInput(action.code, action.down);
+					}
+					if (player.done(control.frame)) {
+						playback = None;
+					}
+				case None:
+					callback(fakeTime);
+			}
+
+			control.frame += 1;
+
+			if (control.paused) {
+				trace('[PAUSE] @ ${control.frame}');
+			}
 		}
-		fakeTime += 17;
-		control.frame += 1;
+	}
+
+	private function requestAnimationFrame(callback:Dynamic) {
+		var wrappedCallback = wrapCallback(callback);
 		if (!control.paused) {
-			var cb = function() {
-				callback(fakeTime);
-			};
 			switch control.speed {
 				case 0:
-					Browser.window.setTimeout(cb, 0.1);
+					Browser.window.setTimeout(wrappedCallback, 100);
 				case 1:
-					_requestAnimationFrame(cb);
+					_requestAnimationFrame(wrappedCallback);
 				case _:
-					Browser.window.setTimeout(cb, 0);
+					Browser.window.setTimeout(wrappedCallback, 0);
 			}
 		} else {
-			pausedCallback = Some(callback);
+			pausedCallback = Some(wrappedCallback);
 		}
-	}
-
-	private function triggerPlayback(player:Video.VideoPlayer) {
-		for (action in player.getActions(control.frame)) {
-            sendGameInput(action.code, action.down);
-		}
-		if (player.done(control.frame))
-			playback = None;
 	}
 
 	private function triggerPausedCallback() {
 		switch pausedCallback {
 			case Some(cb):
 				pausedCallback = None;
-				cb(fakeTime);
+				cb();
 			case None:
 				{}
 		}
 	}
-
 
 	var keyupHandler:Dynamic;
 	var keydownHandler:Dynamic;
@@ -90,56 +108,98 @@ class Engine {
 	private function keyup(callback:Dynamic) {
 		keyupHandler = callback;
 		Browser.window.onkeyup = function(key) {
-            onKey(key.keyCode, false);
+			onKey(key, false);
 		}
 	}
 
 	private function keydown(callback:Dynamic) {
 		keydownHandler = callback;
 		Browser.window.onkeydown = function(key) {
-            onKey(key.keyCode, true);
+			onKey(key, true);
 		}
 	}
 
-    // Top-level for keyboard input from the user.
-    private function onKey(keyCode: Int, down: Bool) {
-        sendGameInput(keyCode, down);
-        if (down) handleInterfaceInput(keyCode);
-    }
+	// Top-level for keyboard input from the user.
+	private function onKey(event:Dynamic, down:Bool) {
+		if (!Util.isSome(playback)) {
+			var suppress = [83, 87, 65, 68];
+			if (suppress.indexOf(event.keyCode) == -1)
+				sendGameInput(event.keyCode, down);
+		}
+		if (down) {
+			if (handleInterfaceInput(event.keyCode, event.ctrlKey))
+				event.preventDefault();
+		}
+	}
 
-    // Send input to the game and record it.
-    private function sendGameInput(keyCode: Int, down: Bool) {
-        recording.recordKey(control.frame, keyCode, down);
-        var event = {which: keyCode, preventDefault: function() {}};
-        if (down) {
-            keydownHandler(event);
-        } else {
-            keyupHandler(event);
-        }
-    }
+	// Send input to the game and record it.
+	private function sendGameInput(keyCode:Int, down:Bool) {
+		recording.recordKey(control.frame, keyCode, down);
+		var event = {which: keyCode, preventDefault: function() {}};
+		if (down) {
+			keydownHandler(event);
+		} else {
+			keyupHandler(event);
+		}
+	}
+
+	private function resetControls() {
+		for (code in Video.keyCodes) {
+			sendGameInput(code, false);
+		}
+	}
+
+	private function resetLevel() {
+		trace("[RESET]");
+		recording = new Video.VideoRecorder();
+		control = new PlayControl();
+		resetControls();
+	}
 
 	// Keyboard interface.
-	private function handleInterfaceInput(keyCode:Int) {
+	// Return true to signal that input was captured.
+	private function handleInterfaceInput(keyCode:Int, ctrlKey:Bool):Bool {
 		// z to step frames
 		if (keyCode == 90 && control.paused) {
 			triggerPausedCallback();
+			return true;
 		}
 
-		// q to switch pause state
-		if (keyCode == 81) {
-			control.paused = !control.paused;
-			if (!control.paused) {
-				triggerPausedCallback();
-			}
+		var oldControl = untyped JSON.parse(JSON.stringify(control));
+
+		// a to pause
+		if (keyCode == 65) { 
+			control.paused = true;
+			return true;
+		}
+
+		// s to go slow, d to go normal
+		if (keyCode == 83 || keyCode == 68) {
+			control.paused = false;
+			control.speed = keyCode == 83 ? 0 : 1;
+			if (oldControl.paused) trace('[PLAY] @ ${control.frame}');
+			triggerPausedCallback();
+			return true;
 		}
 
 		// r to reset level
 		if (keyCode == 82) {
-			trace('level replay string: ${recording.video.toString()}');
-			recording = new Video.VideoRecorder();
-			control = new PlayControl();
-            playback = Some(new Video.VideoPlayer(new Video("uAAA22nACvUwIIHZGW4IFYYZJUqoLIaUGAYrYKKDJBCWDAYqoQAxBAzRAhVEAYlodlpclBKJbJ")));
+			// trace(recording.video.toString());
+			resetLevel();
+			control.pause();
+			triggerPausedCallback();
+			return true;
+		}
+
+		// 0-9 to replay slot
+		if (keyCode >= 48 && keyCode <= 57) {
+			resetLevel();
+			playback = Some(new Video.VideoPlayer(slots[keyCode - 48]));
 			triggerPausedCallback();
 		}
+
+		// 0-9 to 
+
+		return false;
 	}
 }

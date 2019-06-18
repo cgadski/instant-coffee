@@ -14,6 +14,7 @@ class Video {
 	static var longDelaySize = 10;
 
 	public var actions:Array<Action>;
+    public var pauseFrame:Int;
 
 	private function getOption<T>(x:Option<T>):T {
 		switch x {
@@ -30,6 +31,7 @@ class Video {
 			// Load from save.
 			var reader = new Bitstream.BSReader(save);
 			var saveSize = getOption(reader.readInt(headerSize));
+			pauseFrame = getOption(reader.readInt(headerSize));
 			var frame = 0;
 			for (i in 0...saveSize) {
 				var longDelay = getOption(reader.read(1))[0];
@@ -45,6 +47,7 @@ class Video {
 	public function toString():String {
 		var writer = new Bitstream.BSWriter();
 		writer.writeInt(actions.length, headerSize);
+		writer.writeInt(pauseFrame, headerSize);
 		var lastFrame = 0;
 		for (action in actions) {
 			var delay = action.frame - lastFrame;
@@ -74,12 +77,18 @@ class Video {
 
     public static function showActionCode(actionCode: Int): String {
         switch actionCode {
-            case 0: return "left";
-            case 1: return "jump";
+            case 0: return "left ";
+            case 1: return "jump ";
             case 2: return "right";
-            case 3: return "axe";
+            case 3: return "axe  ";
         }
         return "???";
+    }
+
+    public function copy():Video {
+        var video = new Video();
+        video.actions = actions.copy();
+        return video;
     }
 }
 
@@ -101,7 +110,7 @@ class VideoRecorder {
                 if (down == oldState) return;
                 keyStates[action] = down;
                 video.actions.push({frame: frame, code: action, down: down});
-				trace('${Video.showActionCode(action)} ${down ? "down" : "up"} on frame ${frame}');
+				trace('---> ${Video.showActionCode(action)} ${down ? "down" : "up  "} @ ${frame}');
             case None:
                 return;
         }
