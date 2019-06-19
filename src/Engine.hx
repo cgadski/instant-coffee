@@ -18,11 +18,12 @@ class PlayControl {
 }
 
 class Engine {
-	public var control = new PlayControl();
-	public var playback:Option<Video.VideoPlayer> = None; // If this is initialized, we're in playback.
-	public var recording:Video.VideoRecorder = new Video.VideoRecorder();
-	public var slots:Array<Video>;
+	var control = new PlayControl();
+	var playback:Option<Video.VideoPlayer> = None; // If this is initialized, we're in playback.
+	var recording:Video.VideoRecorder = new Video.VideoRecorder();
+	var slots:Array<Video>;
 
+	var fullgameVideo:Null<Array<Video>> = null;
 	var pausedCallback:Option<Dynamic> = None;
 	var fakeTime:Float = 0;
 
@@ -39,11 +40,17 @@ class Engine {
 		}
 		untyped window._keyup = this.keyup;
 		untyped window._keydown = this.keydown;
-		untyped window.load = function(string: String) {
+		untyped window.load = function(string:String) {
 			slots[0] = new Video(string);
 		}
+		untyped window.loadFullgame = function(string:String) {
+			fullgameVideo = string.split(",").map(function(videoString) {
+				return new Video(videoString);
+			});
+		}
+		untyped window.coffee = {};
+		untyped window.coffee.onScene = onScene;
 
-		// Give fakeTime a reasonable initial value.
 		fakeTime = _now();
 
 		slots = new Array();
@@ -63,7 +70,7 @@ class Engine {
 					for (action in player.getActions(control.frame)) {
 						sendGameInput(action.code, action.down);
 					}
-					if (control.frame + 1 >= player.video.pauseFrame) {
+					if (control.frame + 1 >= player.video.pauseFrame && fullgameVideo == null) {
 						control.pause();
 						trace('[PAUSE] @ ${control.frame + 1}');
 						playback = None;
@@ -128,7 +135,7 @@ class Engine {
 			if (suppress.indexOf(event.keyCode) == -1)
 				sendGameInput(event.keyCode, down);
 		}
-		if (down) {
+		if (down && fullgameVideo == null) {
 			if (handleInterfaceInput(event.keyCode, event.ctrlKey))
 				event.preventDefault();
 		}
@@ -151,8 +158,9 @@ class Engine {
 		}
 	}
 
-	private function resetLevel(?slot:Int, ?replay: Bool) {
-		if (replay == null) replay = false;
+	private function resetLevel(?slot:Int, ?replay:Bool) {
+		if (replay == null)
+			replay = false;
 		trace('[${replay ? "REPLAY" : "RESET to"} ${(slot == null) ? "start" : "slot " + Std.string(slot) + "..."}]');
 		sendGameInput(82, true);
 		sendGameInput(82, false);
@@ -231,5 +239,16 @@ class Engine {
 		}
 
 		return false;
+	}
+
+	function onScene(name: String) {
+		if ((fullgameVideo != null) && name.charAt(0) == "L") {
+			var level = Std.parseInt(untyped name.slice(5, 10));
+			resetControls();
+			control.paused = false;
+			control.frame = 0;
+			control.speed = 1;
+			playback = Some(new Video.VideoPlayer(fullgameVideo[level - 1]));
+		}
 	}
 }

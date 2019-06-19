@@ -68,6 +68,15 @@ class VideoTests extends haxe.unit.TestCase {
         assertEquals(Std.string(videoA.actions), Std.string(videoB.actions));
         assertEquals(videoA.pauseFrame, videoB.pauseFrame);
     }
+
+    public function testSplice() {
+        var videoA = new Video();
+        videoA.actions.push({frame: 0, code: 1, down: true});
+        var videoB = new Video();
+        videoA.actions.push({frame: 0, code: 2, down: true});
+        var videoAB = Splice.spliceILs([videoA, videoB]);
+        assertEquals(Std.string(videoA.actions[0]), Std.string(videoAB.actions[0]));
+    }
 }
 
 class Tests {
