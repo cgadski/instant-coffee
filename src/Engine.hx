@@ -23,6 +23,7 @@ class Engine {
 	var recording:Video.VideoRecorder = new Video.VideoRecorder(0);
 	var slots:Array<Video>;
 
+	var fullgameLevelCounter = 0;
 	var fullgameVideo:Null<Array<Video>> = null;
 	var pausedCallback:Option<Dynamic> = None;
 	var fakeTime:Float = 0;
@@ -84,11 +85,24 @@ class Engine {
 					for (action in player.getActions(control.frame)) {
 						sendGameInput(action.code, action.down);
 					}
-					if (control.frame + 1 >= player.video.pauseFrame && fullgameVideo == null) {
-						control.pause();
-						trace('[PAUSE] @ ${control.frame + 1}');
+					if (control.frame + 1 >= player.video.pauseFrame) {
+						// playback is over
+
+						if (fullgameVideo == null) {
+							// normally, pause at the last frame of a video
+							control.pause();
+							trace('[PAUSE] @ ${control.frame + 1}');
+							control.silent = false;
+						} else {
+							// for fullgame playback, prime the initial direction controls
+							if (fullgameLevelCounter >= 1 && fullgameLevelCounter < 15) {
+								initialDirection = fullgameVideo[fullgameLevelCounter].initialDirection;
+								control.frame = 0;
+								primeControls(true);
+							}
+						}
+
 						playback = None;
-						control.silent = false;
 					}
 					callback(fakeTime);
 				case None:
@@ -166,17 +180,23 @@ class Engine {
 		}
 	}
 
-	function primeControls() {
+	function primeControls(buffer:Bool) {
 		for (code in Video.keyCodes) {
 			sendGameInput(code, false);
 		}
 		if (initialDirection == 1) {
-			trace("---> Holding left.");
+			if (buffer)
+				trace("---> Holding controls: LEFT.");
 			sendGameInput(37, true);
 		}
 		if (initialDirection == 2) {
-			trace("---> Holding right.");
+			if (buffer)
+				trace("---> Holding controls: RIGHT.");
 			sendGameInput(39, true);
+		}
+		if (initialDirection == 0) {
+			if (buffer)
+				trace("---> Holding controls: NONE.");
 		}
 	}
 
@@ -188,12 +208,13 @@ class Engine {
 		sendGameInput(82, false);
 		recording = new Video.VideoRecorder(initialDirection);
 		control = new PlayControl();
-		primeControls();
+		primeControls(true);
 	}
 
-	function loadPlayback(video: Video) {
+	function loadPlayback(video:Video) {
 		playback = Some(new Video.VideoPlayer(video));
 		initialDirection = video.initialDirection;
+		recording = new Video.VideoRecorder(initialDirection);
 	}
 
 	// Keyboard interface.
@@ -228,6 +249,7 @@ class Engine {
 		// r to reset level
 		if (keyCode == 82) {
 			// trace(recording.video.toString());
+			playback = None;
 			resetLevel();
 			control.pause();
 			triggerPausedCallback();
@@ -237,18 +259,18 @@ class Engine {
 		// 0-9 to replay slot
 		if (!ctrlKey && keyCode >= 48 && keyCode <= 57) {
 			var slot = keyCode - 48;
-			resetLevel(slot);
 			loadPlayback(slots[slot]);
+			resetLevel(slot);
 			control.speed = 2;
 			control.silent = true;
 			triggerPausedCallback();
 			return true;
 		}
 
-		// play slot 0 back in realtime
+		// p to play slot 0 back in realtime
 		if (keyCode == 80) {
-			resetLevel(0, true);
 			loadPlayback(slots[0]);
+			resetLevel(0, true);
 			control.speed = 1;
 			triggerPausedCallback();
 			return true;
@@ -268,14 +290,14 @@ class Engine {
 		return false;
 	}
 
-	function onScene(name: String) {
+	function onScene(name:String) {
 		if ((fullgameVideo != null) && name.charAt(0) == "L") {
-			var level = Std.parseInt(untyped name.slice(5, 10));
-			loadPlayback(fullgameVideo[level - 1]);
-			primeControls();
+			fullgameLevelCounter = Std.parseInt(untyped name.slice(5, 10));
+			loadPlayback(fullgameVideo[fullgameLevelCounter - 1]);
 			control.paused = false;
 			control.frame = 0;
 			control.speed = 1;
+			primeControls(false);
 		}
 	}
 }
