@@ -53,6 +53,7 @@ class VideoTests extends haxe.unit.TestCase {
     public function testString() {
         var videoA = new Video();
         videoA.pauseFrame = 525;
+        videoA.initialDirection = 2;
         videoA.actions.push({frame: 4, code: 1, down: false});
         videoA.actions.push({frame: 400, code: 1, down: true});
         videoA.actions.push({frame: 404, code: 3, down: true});
@@ -64,9 +65,11 @@ class VideoTests extends haxe.unit.TestCase {
         var videoB = new Video(videoA.toString());
         assertEquals(Std.string(videoA.actions), Std.string(videoB.actions));
         assertEquals(videoA.pauseFrame, videoB.pauseFrame);
+        assertEquals(videoA.initialDirection, videoB.initialDirection);
         var videoB = videoA.copy();
         assertEquals(Std.string(videoA.actions), Std.string(videoB.actions));
         assertEquals(videoA.pauseFrame, videoB.pauseFrame);
+        assertEquals(videoA.initialDirection, videoB.initialDirection);
     }
 
     public function testSplice() {

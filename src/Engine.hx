@@ -20,7 +20,7 @@ class PlayControl {
 class Engine {
 	var control = new PlayControl();
 	var playback:Option<Video.VideoPlayer> = None; // If this is initialized, we're in playback.
-	var recording:Video.VideoRecorder = new Video.VideoRecorder();
+	var recording:Video.VideoRecorder = new Video.VideoRecorder(0);
 	var slots:Array<Video>;
 
 	var fullgameVideo:Null<Array<Video>> = null;
@@ -29,6 +29,7 @@ class Engine {
 
 	var _requestAnimationFrame:Dynamic;
 	var _now:Dynamic;
+	var initialDirection = 0;
 
 	public function new() {
 		// Inject our methods into the global scope.
@@ -40,6 +41,8 @@ class Engine {
 		}
 		untyped window._keyup = this.keyup;
 		untyped window._keydown = this.keydown;
+
+		// API for runners
 		untyped window.load = function(string:String) {
 			slots[0] = new Video(string);
 		}
@@ -48,6 +51,17 @@ class Engine {
 				return new Video(videoString);
 			});
 		}
+		untyped window.startLeft = function() {
+			initialDirection = 1;
+		}
+		untyped window.startRight = function() {
+			initialDirection = 2;
+		}
+		untyped window.startNeutral = function() {
+			initialDirection = 0;
+		}
+
+		// hook into the helper script
 		untyped window.coffee = {};
 		untyped window.coffee.onScene = onScene;
 
@@ -61,7 +75,7 @@ class Engine {
 		control.speed = 1;
 	}
 
-	private function wrapCallback(callback:Dynamic) {
+	function wrapCallback(callback:Dynamic) {
 		return function() {
 			fakeTime += 16;
 
@@ -85,7 +99,7 @@ class Engine {
 		}
 	}
 
-	private function requestAnimationFrame(callback:Dynamic) {
+	function requestAnimationFrame(callback:Dynamic) {
 		var wrappedCallback = wrapCallback(callback);
 		if (!control.paused) {
 			switch control.speed {
@@ -101,7 +115,7 @@ class Engine {
 		}
 	}
 
-	private function triggerPausedCallback() {
+	function triggerPausedCallback() {
 		switch pausedCallback {
 			case Some(cb):
 				pausedCallback = None;
@@ -114,14 +128,14 @@ class Engine {
 	var keyupHandler:Dynamic;
 	var keydownHandler:Dynamic;
 
-	private function keyup(callback:Dynamic) {
+	function keyup(callback:Dynamic) {
 		keyupHandler = callback;
 		Browser.window.onkeyup = function(key) {
 			onKey(key, false);
 		}
 	}
 
-	private function keydown(callback:Dynamic) {
+	function keydown(callback:Dynamic) {
 		keydownHandler = callback;
 		Browser.window.onkeydown = function(key) {
 			onKey(key, true);
@@ -129,7 +143,7 @@ class Engine {
 	}
 
 	// Top-level for keyboard input from the user.
-	private function onKey(event:Dynamic, down:Bool) {
+	function onKey(event:Dynamic, down:Bool) {
 		if (!Util.isSome(playback)) {
 			var suppress = [83, 87, 65, 68, 82]; // alternate movement keys and `r`
 			if (suppress.indexOf(event.keyCode) == -1)
@@ -142,7 +156,7 @@ class Engine {
 	}
 
 	// Send input to the game and record it.
-	private function sendGameInput(keyCode:Int, down:Bool) {
+	function sendGameInput(keyCode:Int, down:Bool) {
 		recording.recordKey(control.frame, keyCode, down, control.silent);
 		var event = {which: keyCode, preventDefault: function() {}};
 		if (down) {
@@ -152,26 +166,39 @@ class Engine {
 		}
 	}
 
-	private function resetControls() {
+	function primeControls() {
 		for (code in Video.keyCodes) {
 			sendGameInput(code, false);
 		}
+		if (initialDirection == 1) {
+			trace("---> Holding left.");
+			sendGameInput(37, true);
+		}
+		if (initialDirection == 2) {
+			trace("---> Holding right.");
+			sendGameInput(39, true);
+		}
 	}
 
-	private function resetLevel(?slot:Int, ?replay:Bool) {
+	function resetLevel(?slot:Int, ?replay:Bool) {
 		if (replay == null)
 			replay = false;
 		trace('[${replay ? "REPLAY" : "RESET to"} ${(slot == null) ? "start" : "slot " + Std.string(slot) + "..."}]');
 		sendGameInput(82, true);
 		sendGameInput(82, false);
-		recording = new Video.VideoRecorder();
+		recording = new Video.VideoRecorder(initialDirection);
 		control = new PlayControl();
-		resetControls();
+		primeControls();
+	}
+
+	function loadPlayback(video: Video) {
+		playback = Some(new Video.VideoPlayer(video));
+		initialDirection = video.initialDirection;
 	}
 
 	// Keyboard interface.
 	// Return true to signal that input was captured.
-	private function handleInterfaceInput(keyCode:Int, ctrlKey:Bool):Bool {
+	function handleInterfaceInput(keyCode:Int, ctrlKey:Bool):Bool {
 		// z to step frames
 		if (keyCode == 90 && control.paused) {
 			triggerPausedCallback();
@@ -211,7 +238,7 @@ class Engine {
 		if (!ctrlKey && keyCode >= 48 && keyCode <= 57) {
 			var slot = keyCode - 48;
 			resetLevel(slot);
-			playback = Some(new Video.VideoPlayer(slots[slot]));
+			loadPlayback(slots[slot]);
 			control.speed = 2;
 			control.silent = true;
 			triggerPausedCallback();
@@ -221,7 +248,7 @@ class Engine {
 		// play slot 0 back in realtime
 		if (keyCode == 80) {
 			resetLevel(0, true);
-			playback = Some(new Video.VideoPlayer(slots[0]));
+			loadPlayback(slots[0]);
 			control.speed = 1;
 			triggerPausedCallback();
 			return true;
@@ -244,11 +271,11 @@ class Engine {
 	function onScene(name: String) {
 		if ((fullgameVideo != null) && name.charAt(0) == "L") {
 			var level = Std.parseInt(untyped name.slice(5, 10));
-			resetControls();
+			loadPlayback(fullgameVideo[level - 1]);
+			primeControls();
 			control.paused = false;
 			control.frame = 0;
 			control.speed = 1;
-			playback = Some(new Video.VideoPlayer(fullgameVideo[level - 1]));
 		}
 	}
 }

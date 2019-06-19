@@ -15,6 +15,7 @@ class Video {
 
 	public var actions:Array<Action>;
     public var pauseFrame:Int = 0;
+	public var initialDirection: Int = 0; // 0 for none, 1 for left, 2 for right
 
 	private function getOption<T>(x:Option<T>):T {
 		switch x {
@@ -30,7 +31,8 @@ class Video {
 		if (save != null) {
 			// Load from save.
 			var reader = new Bitstream.BSReader(save);
-			var saveSize = getOption(reader.readInt(headerSize));
+			var saveSize = getOption(reader.readInt(12));
+			initialDirection = getOption(reader.readInt(12));
 			pauseFrame = getOption(reader.readInt(headerSize));
 			var frame = 0;
 			for (i in 0...saveSize) {
@@ -46,7 +48,8 @@ class Video {
 
 	public function toString():String {
 		var writer = new Bitstream.BSWriter();
-		writer.writeInt(actions.length, headerSize);
+		writer.writeInt(actions.length, 12);
+		writer.writeInt(initialDirection, 12);
 		writer.writeInt(pauseFrame, headerSize);
 		var lastFrame = 0;
 		for (action in actions) {
@@ -89,6 +92,7 @@ class Video {
         var video = new Video();
         video.actions = actions.copy();
         video.pauseFrame = pauseFrame;
+        video.initialDirection = initialDirection;
         return video;
     }
 }
@@ -97,11 +101,12 @@ class VideoRecorder {
     public var video:Video = new Video();
     private var keyStates:Array<Bool>;
 
-    public function new() {
+    public function new(initialDirection: Int) {
         keyStates = new Array();
         for (i in 0...Video.keyCodes.length) {
             keyStates.push(false);
         }
+		video.initialDirection = initialDirection;
     }
 
     public function recordKey(frame: Int, keyCode: Int, down: Bool, silent: Bool) {
