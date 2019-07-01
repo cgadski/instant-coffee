@@ -18,6 +18,8 @@ class PlayControl {
 }
 
 class Engine {
+	var frameLength:Float = 16;
+
 	var control = new PlayControl();
 	var playback:Option<Video.VideoPlayer> = None; // If this is initialized, we're in playback.
 	var recording:Video.VideoRecorder = new Video.VideoRecorder(0);
@@ -61,6 +63,9 @@ class Engine {
 		untyped window.startNeutral = function() {
 			initialDirection = 0;
 		}
+		untyped window.useFrame = function(fl) {
+			frameLength = fl;
+		}
 
 		// hook into the helper script
 		untyped window.coffee = {};
@@ -78,7 +83,7 @@ class Engine {
 
 	function wrapCallback(callback:Dynamic) {
 		return function() {
-			fakeTime += 16;
+			fakeTime += frameLength;
 
 			switch playback {
 				case Some(player):
@@ -236,10 +241,14 @@ class Engine {
 			return true;
 		}
 
-		// s to go slow, d to go normal
-		if (keyCode == 83 || keyCode == 68) {
+		// s to go slow, d to go normal, f to go fast
+		if (keyCode == 83 || keyCode == 68 || keyCode == 70) {
 			control.paused = false;
-			control.speed = keyCode == 83 ? 0 : 1;
+			switch keyCode {
+				case 83: control.speed = 0;
+				case 68: control.speed = 1;
+				case _: control.speed = 2;
+			}
 			if (oldControl.paused)
 				trace('[PLAY] @ ${control.frame}');
 			triggerPausedCallback();

@@ -19,7 +19,8 @@ class Main {
 		infoTrace("ctrl+[0-9] to set save."); 
 		infoTrace("[0-9] to load save."); 
 		infoTrace("[p] to play the save in slot 0 in realtime");
-		infoTrace("`window.loadSave(string)` to read save data.");
+		infoTrace("`window.load(string)` to read savestate. You should be already on the correct level.");
+		infoTrace("`window.start{Left,Neutral,Right}()` to start the level with a direction key already pressed.");
 
 		var engine = new Engine();
 	}
