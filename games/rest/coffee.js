@@ -145,7 +145,6 @@ var Engine = function() {
 	this.fakeTime = 0;
 	this.pausedCallback = haxe_ds_Option.None;
 	this.fullgameVideo = null;
-	this.fullgameLevelCounter = 0;
 	this.recording = new VideoRecorder(0);
 	this.playback = haxe_ds_Option.None;
 	this.control = new PlayControl();
@@ -163,9 +162,10 @@ var Engine = function() {
 		_gthis.slots[0] = new Video(string);
 	};
 	window.loadFullgame = function(string1) {
-		_gthis.fullgameVideo = string1.split(",").map(function(videoString) {
-			return new Video(videoString);
-		});
+		_gthis.fullgameVideo = JSON.parse(string1);
+	};
+	window.clearFullgame = function(string2) {
+		_gthis.fullgameVideo = null;
 	};
 	window.startLeft = function() {
 		_gthis.initialDirection = 1;
@@ -212,10 +212,6 @@ Engine.prototype = {
 						_gthis.control.pause();
 						console.log("[PAUSE ] @ " + (_gthis.control.frame + 1));
 						_gthis.control.silent = false;
-					} else if(_gthis.fullgameLevelCounter >= 1 && _gthis.fullgameLevelCounter < 15) {
-						_gthis.initialDirection = _gthis.fullgameVideo[_gthis.fullgameLevelCounter].initialDirection;
-						_gthis.control.frame = 0;
-						_gthis.primeControls(true);
 					}
 					_gthis.playback = haxe_ds_Option.None;
 				}
@@ -408,24 +404,15 @@ Engine.prototype = {
 		return false;
 	}
 	,onScene: function(name) {
-		if(this.fullgameVideo != null && name.charAt(0) == "L") {
-			this.fullgameLevelCounter = Std.parseInt(name.slice(5,10));
-			this.loadPlayback(this.fullgameVideo[this.fullgameLevelCounter - 1]);
+		console.log("[SCENE " + name + "]");
+		if(this.fullgameVideo != null && Reflect.field(this.fullgameVideo,name) != null) {
+			this.loadPlayback(new Video(Reflect.field(this.fullgameVideo,name)));
 			this.control.paused = false;
 			this.control.frame = 0;
 			this.control.speed = 1;
 			this.primeControls(false);
 		}
 	}
-};
-var HxOverrides = function() { };
-HxOverrides.__name__ = true;
-HxOverrides.cca = function(s,index) {
-	var x = s.charCodeAt(index);
-	if(x != x) {
-		return undefined;
-	}
-	return x;
 };
 var CoffeeInput = { __ename__ : true, __constructs__ : ["StepFrame","Pause","PlaySlow","PlayNormal","PlayFast","Reset","Slot"] };
 CoffeeInput.StepFrame = ["StepFrame",0];
@@ -485,17 +472,14 @@ Main.main = function() {
 	var engine = new Engine();
 };
 Math.__name__ = true;
-var Std = function() { };
-Std.__name__ = true;
-Std.parseInt = function(x) {
-	var v = parseInt(x,10);
-	if(v == 0 && (HxOverrides.cca(x,1) == 120 || HxOverrides.cca(x,1) == 88)) {
-		v = parseInt(x);
-	}
-	if(isNaN(v)) {
+var Reflect = function() { };
+Reflect.__name__ = true;
+Reflect.field = function(o,field) {
+	try {
+		return o[field];
+	} catch( e ) {
 		return null;
 	}
-	return v;
 };
 var Util = function() { };
 Util.__name__ = true;
@@ -532,9 +516,10 @@ var Video = function(save) {
 };
 Video.__name__ = true;
 Video.toActionCode = function(keyCode) {
-	var _g = 0;
-	while(_g < 4) {
-		var i = _g++;
+	var _g1 = 0;
+	var _g = Video.keyCodes.length;
+	while(_g1 < _g) {
+		var i = _g1++;
 		if(Video.keyCodes[i] == keyCode) {
 			return haxe_ds_Option.Some(i);
 		}
@@ -556,6 +541,8 @@ Video.showActionCode = function(actionCode) {
 		return "down   ";
 	case 4:
 		return "action ";
+	case 5:
+		return "space  ";
 	}
 	return "???    ";
 };
@@ -678,6 +665,92 @@ js__$Boot_HaxeError.wrap = function(val) {
 js__$Boot_HaxeError.__super__ = Error;
 js__$Boot_HaxeError.prototype = $extend(Error.prototype,{
 });
+var js_Boot = function() { };
+js_Boot.__name__ = true;
+js_Boot.__string_rec = function(o,s) {
+	if(o == null) {
+		return "null";
+	}
+	if(s.length >= 5) {
+		return "<...>";
+	}
+	var t = typeof(o);
+	if(t == "function" && (o.__name__ || o.__ename__)) {
+		t = "object";
+	}
+	switch(t) {
+	case "function":
+		return "<function>";
+	case "object":
+		if(o instanceof Array) {
+			if(o.__enum__) {
+				if(o.length == 2) {
+					return o[0];
+				}
+				var str = o[0] + "(";
+				s += "\t";
+				var _g1 = 2;
+				var _g = o.length;
+				while(_g1 < _g) {
+					var i = _g1++;
+					if(i != 2) {
+						str += "," + js_Boot.__string_rec(o[i],s);
+					} else {
+						str += js_Boot.__string_rec(o[i],s);
+					}
+				}
+				return str + ")";
+			}
+			var l = o.length;
+			var i1;
+			var str1 = "[";
+			s += "\t";
+			var _g11 = 0;
+			var _g2 = l;
+			while(_g11 < _g2) {
+				var i2 = _g11++;
+				str1 += (i2 > 0 ? "," : "") + js_Boot.__string_rec(o[i2],s);
+			}
+			str1 += "]";
+			return str1;
+		}
+		var tostr;
+		try {
+			tostr = o.toString;
+		} catch( e ) {
+			return "???";
+		}
+		if(tostr != null && tostr != Object.toString && typeof(tostr) == "function") {
+			var s2 = o.toString();
+			if(s2 != "[object Object]") {
+				return s2;
+			}
+		}
+		var k = null;
+		var str2 = "{\n";
+		s += "\t";
+		var hasp = o.hasOwnProperty != null;
+		for( var k in o ) {
+		if(hasp && !o.hasOwnProperty(k)) {
+			continue;
+		}
+		if(k == "prototype" || k == "__class__" || k == "__super__" || k == "__interfaces__" || k == "__properties__") {
+			continue;
+		}
+		if(str2.length != 2) {
+			str2 += ", \n";
+		}
+		str2 += s + k + " : " + js_Boot.__string_rec(o[k],s);
+		}
+		s = s.substring(1);
+		str2 += "\n" + s + "}";
+		return str2;
+	case "string":
+		return o;
+	default:
+		return String(o);
+	}
+};
 var $_, $fid = 0;
 function $bind(o,m) { if( m == null ) return null; if( m.__id__ == null ) m.__id__ = $fid++; var f; if( o.hx__closures__ == null ) o.hx__closures__ = {}; else f = o.hx__closures__[m.__id__]; if( f == null ) { f = function(){ return f.method.apply(f.scope, arguments); }; f.scope = o; f.method = m; o.hx__closures__[m.__id__] = f; } return f; }
 String.__name__ = true;
@@ -685,7 +758,7 @@ Array.__name__ = true;
 Video.headerSize = 24;
 Video.delaySize = 5;
 Video.longDelaySize = 10;
-Video.keyCodes = [37,38,39,40,88];
+Video.keyCodes = [37,38,39,40,88,32];
 haxe_crypto_Base64.CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 Main.main();
 })();

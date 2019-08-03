@@ -1,5 +1,7 @@
 package;
 
+import haxe.Json;
+import KeyBindings;
 import js.Browser;
 import haxe.ds.Option;
 
@@ -25,8 +27,8 @@ class Engine {
 	var recording:Video.VideoRecorder = new Video.VideoRecorder(0);
 	var slots:Array<Video>;
 
-	var fullgameLevelCounter = 0;
-	var fullgameVideo:Null<Array<Video>> = null;
+	var fullgameVideo:Dynamic = null; // Special level-by-level videos for eddynardo.
+
 	var pausedCallback:Option<Dynamic> = None;
 	var fakeTime:Float = 0;
 
@@ -50,9 +52,10 @@ class Engine {
 			slots[0] = new Video(string);
 		}
 		untyped window.loadFullgame = function(string:String) {
-			fullgameVideo = string.split(",").map(function(videoString) {
-				return new Video(videoString);
-			});
+			fullgameVideo = Json.parse(string);
+		}
+		untyped window.clearFullgame = function(string:String) {
+			fullgameVideo = null;
 		}
 		untyped window.startLeft = function() {
 			initialDirection = 1;
@@ -96,15 +99,17 @@ class Engine {
 						if (fullgameVideo == null) {
 							// normally, pause at the last frame of a video
 							control.pause();
-							trace('[PAUSE] @ ${control.frame + 1}');
+							trace('[PAUSE ] @ ${control.frame + 1}');
 							control.silent = false;
 						} else {
 							// for fullgame playback, prime the initial direction controls
+							/*
 							if (fullgameLevelCounter >= 1 && fullgameLevelCounter < 15) {
 								initialDirection = fullgameVideo[fullgameLevelCounter].initialDirection;
 								control.frame = 0;
 								primeControls(true);
 							}
+							*/
 						}
 
 						playback = None;
@@ -164,13 +169,20 @@ class Engine {
 	// Top-level for keyboard input from the user.
 	function onKey(event:Dynamic, down:Bool) {
 		if (!Util.isSome(playback)) {
-			var suppress = [83, 87, 65, 68, 82]; // alternate movement keys and `r`
-			if (suppress.indexOf(event.keyCode) == -1)
+			// We're not in playback, so we should pass through keys.
+			// var suppress = [83, 87, 65, 68, 82]; // alternate movement keys and `r`
+			if (Video.keyCodes.indexOf(event.keyCode) != -1)
 				sendGameInput(event.keyCode, down);
 		}
-		if (down && fullgameVideo == null) {
-			if (handleInterfaceInput(event.keyCode, event.ctrlKey))
-				event.preventDefault();
+		if (down) {
+			switch (KeyBindings.fromKeyCode(event.keyCode)) {
+				case Some(input):
+					if (handleInterfaceInput(input, event.ctrlKey, event.altKey)) {
+						event.preventDefault();
+					}
+				case _:
+					{}
+			}
 		}
 	}
 
@@ -224,40 +236,48 @@ class Engine {
 
 	// Keyboard interface.
 	// Return true to signal that input was captured.
-	function handleInterfaceInput(keyCode:Int, ctrlKey:Bool):Bool {
-		// z to step frames
-		if (keyCode == 90 && control.paused) {
+	function handleInterfaceInput(input:KeyBindings.CoffeeInput, ctrlKey:Bool, altKey:Bool):Bool {
+		var oldControl = untyped JSON.parse(JSON.stringify(control));
+
+		// stepping frames
+		if (input == CoffeeInput.StepFrame && control.paused) {
+			trace('[STEP  ] @ ${control.frame + 1}');
 			triggerPausedCallback();
 			return true;
 		}
 
-		var oldControl = untyped JSON.parse(JSON.stringify(control));
-
-		// a to pause
-		if (keyCode == 65) {
+		// pausing
+		if (input == CoffeeInput.Pause) {
 			if (!oldControl.paused)
-				trace('[PAUSE] @ ${control.frame + 1}');
+				trace('[PAUSE ] @ ${control.frame + 1}');
 			control.pause();
 			return true;
 		}
 
-		// s to go slow, d to go normal, f to go fast
-		if (keyCode == 83 || keyCode == 68 || keyCode == 70) {
-			control.paused = false;
-			switch keyCode {
-				case 83: control.speed = 0;
-				case 68: control.speed = 1;
-				case _: control.speed = 2;
+		// changing playback speed
+		{
+			var playAction = true;
+			switch (input) {
+				case CoffeeInput.PlaySlow:
+					control.speed = 0;
+				case CoffeeInput.PlayNormal:
+					control.speed = 1;
+				case CoffeeInput.PlayFast:
+					control.speed = 2;
+				case _:
+					playAction = false;
 			}
-			if (oldControl.paused)
-				trace('[PLAY] @ ${control.frame}');
-			triggerPausedCallback();
-			return true;
+			if (playAction) {
+				control.paused = false;
+				if (oldControl.paused)
+					trace('[PLAY  ] @ ${control.frame}');
+				triggerPausedCallback();
+				return true;
+			}
 		}
 
 		// r to reset level
-		if (keyCode == 82) {
-			// trace(recording.video.toString());
+		if (input == CoffeeInput.Reset) {
 			playback = None;
 			resetLevel();
 			control.pause();
@@ -265,44 +285,40 @@ class Engine {
 			return true;
 		}
 
-		// 0-9 to replay slot
-		if (!ctrlKey && keyCode >= 48 && keyCode <= 57) {
-			var slot = keyCode - 48;
-			loadPlayback(slots[slot]);
-			resetLevel(slot);
-			control.speed = 2;
-			control.silent = true;
-			triggerPausedCallback();
-			return true;
-		}
+		// handling slots
+		switch (input) {
+			case CoffeeInput.Slot(slot):
+				// replay slot
+				if (!ctrlKey) {
+					loadPlayback(slots[slot]);
+					resetLevel(slot);
+					control.speed = 2;
+					if (altKey)
+						control.pause();
+					control.silent = true;
+					triggerPausedCallback();
+					return true;
+				}
 
-		// p to play slot 0 back in realtime
-		if (keyCode == 80) {
-			loadPlayback(slots[0]);
-			resetLevel(0, true);
-			control.speed = 1;
-			triggerPausedCallback();
-			return true;
+				// with ctrl: save slot
+				if (ctrlKey && !altKey) {
+					control.pause();
+					var video = recording.saveVideo(control.frame);
+					trace('[SAVE slot ${slot}] @ ${control.frame}');
+					trace('data: ${video.toString()}');
+					slots[slot] = video;
+					return true;
+				}
+			case _:
+				{}
 		}
-
-		// ctrl +0-9 to save slot
-		if (ctrlKey && keyCode >= 48 && keyCode <= 57) {
-			control.pause();
-			var slot = keyCode - 48;
-			var video = recording.saveVideo(control.frame);
-			trace('[SAVE slot ${slot}] @ ${control.frame}');
-			trace('data: ${video.toString()}');
-			slots[slot] = video;
-			return true;
-		}
-
 		return false;
 	}
 
 	function onScene(name:String) {
-		if ((fullgameVideo != null) && name.charAt(0) == "L") {
-			fullgameLevelCounter = Std.parseInt(untyped name.slice(5, 10));
-			loadPlayback(fullgameVideo[fullgameLevelCounter - 1]);
+		trace('[SCENE ${name}]');
+		if ((fullgameVideo != null) && Reflect.field(fullgameVideo, name) != null) {
+			loadPlayback(new Video(Reflect.field(fullgameVideo, name)));
 			control.paused = false;
 			control.frame = 0;
 			control.speed = 1;

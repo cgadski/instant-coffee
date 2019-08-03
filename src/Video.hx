@@ -38,7 +38,7 @@ class Video {
 			for (i in 0...saveSize) {
 				var longDelay = getOption(reader.read(1))[0];
 				var delay = getOption(reader.readInt(longDelay ? longDelaySize : delaySize));
-				var code = getOption(reader.readInt(2));
+				var code = getOption(reader.readInt(3));
 				var down = getOption(reader.read(1));
 				frame += delay;
 				actions.push({frame: frame, code: code, down: down[0]});
@@ -58,16 +58,16 @@ class Video {
 			var longDelay = delay >= 32;
 			writer.write([longDelay]);
 			writer.writeInt(delay, longDelay ? longDelaySize : delaySize);
-			writer.writeInt(action.code, 2);
+			writer.writeInt(action.code, 3);
 			writer.write([action.down]);
 		}
 		return writer.toString();
 	}
 
-	public static var keyCodes = [37, 38, 39, 88];
+	public static var keyCodes = [37, 38, 39, 40, 88, 32];
 
 	public static function toActionCode(keyCode:Int):Option<Int> {
-		for (i in 0...4) {
+		for (i in 0...keyCodes.length) {
 			if (keyCodes[i] == keyCode)
 				return Some(i);
 		}
@@ -81,15 +81,19 @@ class Video {
 	public static function showActionCode(actionCode:Int):String {
 		switch actionCode {
 			case 0:
-				return "left ";
+				return "left   ";
 			case 1:
-				return "jump ";
+				return "up     ";
 			case 2:
-				return "right";
+				return "right  ";
 			case 3:
-				return "axe  ";
+				return "down   ";
+			case 4:
+				return "action ";
+			case 5:
+				return "space  ";
 		}
-		return "???";
+		return "???    ";
 	}
 
 	public function copy():Video {

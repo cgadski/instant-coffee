@@ -56,11 +56,11 @@ class VideoTests extends haxe.unit.TestCase {
         videoA.initialDirection = 2;
         videoA.actions.push({frame: 4, code: 1, down: false});
         videoA.actions.push({frame: 400, code: 1, down: true});
-        videoA.actions.push({frame: 404, code: 3, down: true});
+        videoA.actions.push({frame: 404, code: 4, down: true});
         videoA.actions.push({frame: 405, code: 2, down: false});
         videoA.actions.push({frame: 500, code: 0, down: true});
         videoA.actions.push({frame: 501, code: 0, down: false});
-        videoA.actions.push({frame: 502, code: 0, down: true});
+        videoA.actions.push({frame: 502, code: 2, down: true});
         videoA.actions.push({frame: 520, code: 1, down: false});
         var videoB = new Video(videoA.toString());
         assertEquals(Std.string(videoA.actions), Std.string(videoB.actions));

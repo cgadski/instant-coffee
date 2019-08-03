@@ -16,8 +16,9 @@ class Main {
 		infoTrace("[r] to reset and pause.");
 		infoTrace("[a-s-d] to adjust playback.");
 		infoTrace("[z] to step frame."); 
-		infoTrace("ctrl+[0-9] to save video."); 
 		infoTrace("[0-9] to reset and play back video."); 
+		infoTrace("ctrl+[0-9] to save video."); 
+		infoTrace("alt+[0-9] to play back video, pausing on frame 1."); 
 		infoTrace("[p] to reset and play the video in slot 0 in realtime");
 		infoTrace("`window.load(string)` to read video.");
 		infoTrace("`window.start{Left,Neutral,Right}()` to configure inputs on frame 0.");
